@@ -8,7 +8,15 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
                      // use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
 
 use cortex_m_rt::entry;
-use stm32f1xx_hal::{gpio::OutputSpeed, pac, prelude::*, timer::Timer};
+use key::my_key;
+use led::my_led;
+use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
+
+#[path = "./key/mod.rs"]
+mod key;
+
+#[path = "./led/mod.rs"]
+mod led;
 
 #[entry]
 fn main() -> ! {
@@ -18,18 +26,19 @@ fn main() -> ! {
     let mut flash = dp.FLASH.constrain();
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
-
-    let mut gpioa = dp.GPIOA.split();
-
-    let mut led = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
-    led.set_speed(&mut gpioa.crl, stm32f1xx_hal::gpio::IOPinSpeed::Mhz50);
-
     let mut timer = Timer::syst(cp.SYST, &clocks).delay();
 
+    let (mut led1, mut led2) = my_led::led_init(dp.GPIOA.split());
+
+    let (mut key1, mut key2) = my_key::key_init(dp.GPIOB.split());
+
     loop {
-        led.set_low();
-        timer.delay_ms(500_u16);
-        led.set_high();
-        timer.delay_ms(500_u16);
+        if key1.is_entered(&mut timer) {
+            led1.led_turn();
+        }
+
+        if key2.is_entered(&mut timer) {
+            led2.led_turn();
+        }
     }
 }
