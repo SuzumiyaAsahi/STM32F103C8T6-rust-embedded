@@ -10,6 +10,7 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
 use cortex_m_rt::entry;
 use key::my_key;
 use led::my_led;
+use rtt_target::{rprintln, rtt_init_print};
 use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
 
 #[path = "./key/mod.rs"]
@@ -20,6 +21,7 @@ mod led;
 
 #[entry]
 fn main() -> ! {
+    rtt_init_print!();
     let cp = cortex_m::Peripherals::take().unwrap();
     let dp = pac::Peripherals::take().unwrap();
     let rcc = dp.RCC.constrain();
@@ -32,6 +34,7 @@ fn main() -> ! {
 
     let (mut key1, mut key2) = my_key::key_init(dp.GPIOB.split());
 
+    rprintln!("Hello, world!");
     loop {
         if key1.is_entered(&mut timer) {
             led1.led_turn();

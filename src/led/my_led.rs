@@ -9,6 +9,7 @@ pub struct Led<const P: char, const N: u8> {
     inner: Pin<P, N, Output>,
 }
 
+#[allow(dead_code)]
 impl<const P: char, const N: u8> Led<P, N> {
     pub fn light_on(&mut self) {
         self.inner.set_low()
