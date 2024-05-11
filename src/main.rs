@@ -18,11 +18,15 @@ use stm32f1xx_hal::{
     prelude::*,
 };
 
-#[allow(non_upper_case_globals)]
-static jack: Mutex<RefCell<Option<Pin<'B', 14, Input<PullUp>>>>> = Mutex::new(RefCell::new(None));
+type Dectector = Mutex<RefCell<Option<Pin<'B', 14, Input<PullUp>>>>>;
+
+type Counter = Mutex<RefCell<Option<u32>>>;
 
 #[allow(non_upper_case_globals)]
-static rose: Mutex<RefCell<Option<u32>>> = Mutex::new(RefCell::new(None));
+static _jack: Dectector = Mutex::new(RefCell::new(None));
+
+#[allow(non_upper_case_globals)]
+static _rose: Counter = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
@@ -47,8 +51,8 @@ fn main() -> ! {
     }
 
     cortex_m::interrupt::free(|cs| {
-        jack.borrow(cs).replace(Some(infraed_sensor));
-        rose.borrow(cs).replace(Some(0));
+        _jack.borrow(cs).replace(Some(infraed_sensor));
+        _rose.borrow(cs).replace(Some(0));
     });
 
     #[allow(clippy::empty_loop)]
@@ -58,12 +62,12 @@ fn main() -> ! {
 #[interrupt]
 fn EXTI15_10() {
     cortex_m::interrupt::free(|cs| {
-        let mut infrared_detection = jack.borrow(cs).borrow_mut();
+        let mut infrared_detection = _jack.borrow(cs).borrow_mut();
         if infrared_detection.as_mut().unwrap().check_interrupt() {
-            rprintln!(
-                "the rose is {}",
-                rose.borrow(cs).borrow_mut().unwrap().add(1)
-            );
+            let mut rose = _rose.borrow(cs).borrow_mut();
+            let rose = rose.as_mut().unwrap();
+            *rose = rose.add(1);
+            rprintln!("the rose is {}", rose);
             infrared_detection
                 .as_mut()
                 .unwrap()
