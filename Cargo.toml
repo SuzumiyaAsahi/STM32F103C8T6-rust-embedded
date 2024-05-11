@@ -41,7 +41,12 @@ test = false
 bench = false
 
 [[bin]]
-name = "led_key"
+name = "01_led_key"
+test = false
+bench = false
+
+[[bin]]
+name = "02_external_interrupt"
 test = false
 bench = false
 
