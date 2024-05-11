@@ -7,41 +7,67 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
                      // use panic_itm as _; // logs messages over ITM; requires ITM support
                      // use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
 
+use core::{cell::RefCell, ops::Add};
+use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
-use key::my_key;
-use led::my_led;
+use pac::interrupt;
 use rtt_target::{rprintln, rtt_init_print};
-use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
+use stm32f1xx_hal::{
+    gpio::{Edge, ExtiPin, Input, Pin, PullUp},
+    pac,
+    prelude::*,
+};
 
-#[path = "./key/mod.rs"]
-mod key;
+#[allow(non_upper_case_globals)]
+static jack: Mutex<RefCell<Option<Pin<'B', 14, Input<PullUp>>>>> = Mutex::new(RefCell::new(None));
 
-#[path = "./led/mod.rs"]
-mod led;
+#[allow(non_upper_case_globals)]
+static rose: Mutex<RefCell<Option<u32>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
-    let cp = cortex_m::Peripherals::take().unwrap();
-    let dp = pac::Peripherals::take().unwrap();
-    let rcc = dp.RCC.constrain();
-    let mut flash = dp.FLASH.constrain();
+    let _cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
-    let clocks = rcc.cfgr.freeze(&mut flash.acr);
-    let mut timer = Timer::syst(cp.SYST, &clocks).delay();
+    let mut dp = pac::Peripherals::take().unwrap();
 
-    let (mut led1, mut led2) = my_led::led_init(dp.GPIOA.split());
+    let mut gpiob = dp.GPIOB.split();
+    let mut afio = dp.AFIO.constrain();
+    let mut infraed_sensor = gpiob.pb14.into_pull_up_input(&mut gpiob.crh);
+    infraed_sensor.make_interrupt_source(&mut afio);
 
-    let (mut key1, mut key2) = my_key::key_init(dp.GPIOB.split());
+    infraed_sensor.trigger_on_edge(&mut dp.EXTI, Edge::Falling);
+
+    infraed_sensor.enable_interrupt(&mut dp.EXTI);
 
     rprintln!("Hello, world!");
-    loop {
-        if key1.is_entered(&mut timer) {
-            led1.led_turn();
-        }
 
-        if key2.is_entered(&mut timer) {
-            led2.led_turn();
-        }
+    unsafe {
+        pac::NVIC::unmask(pac::Interrupt::EXTI15_10);
     }
+
+    cortex_m::interrupt::free(|cs| {
+        jack.borrow(cs).replace(Some(infraed_sensor));
+        rose.borrow(cs).replace(Some(0));
+    });
+
+    #[allow(clippy::empty_loop)]
+    loop {}
+}
+
+#[interrupt]
+fn EXTI15_10() {
+    cortex_m::interrupt::free(|cs| {
+        let mut infrared_detection = jack.borrow(cs).borrow_mut();
+        if infrared_detection.as_mut().unwrap().check_interrupt() {
+            rprintln!(
+                "the rose is {}",
+                rose.borrow(cs).borrow_mut().unwrap().add(1)
+            );
+            infrared_detection
+                .as_mut()
+                .unwrap()
+                .clear_interrupt_pending_bit()
+        }
+    })
 }
