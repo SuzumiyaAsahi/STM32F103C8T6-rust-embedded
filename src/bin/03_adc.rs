@@ -19,6 +19,7 @@ fn main() -> ! {
     let rcc = dp.RCC.constrain();
     let mut flash = dp.FLASH.constrain();
 
+    // 选择时钟6分频
     let clocks = rcc.cfgr.adcclk(6.MHz()).freeze(&mut flash.acr);
 
     let mut adc1 = adc::Adc::adc1(dp.ADC1, clocks);
