@@ -7,76 +7,48 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
                      // use panic_itm as _; // logs messages over ITM; requires ITM support
                      // use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
 
-use core::cell::RefCell;
-use cortex_m::interrupt::Mutex;
+use cortex_m::singleton;
 use cortex_m_rt::entry;
-use pac::interrupt;
 use rtt_target::{rprint, rprintln, rtt_init_print};
-use stm32f1xx_hal::{
-    gpio::{Edge, ExtiPin, IOPinSpeed, Input, Output, OutputSpeed, Pin, PullUp},
-    pac,
-    prelude::*,
-};
-
-type Dectector = Mutex<RefCell<Option<Pin<'A', 8, Input<PullUp>>>>>;
-type LED = Mutex<RefCell<Option<Pin<'B', 1, Output>>>>;
-
-#[allow(non_upper_case_globals)]
-static _jack: Dectector = Mutex::new(RefCell::new(None));
-
-#[allow(non_upper_case_globals)]
-static _rose: LED = Mutex::new(RefCell::new(None));
+use stm32f1xx_hal::dma::Half;
+use stm32f1xx_hal::{adc, pac, prelude::*, timer::Timer};
 
 #[entry]
 fn main() -> ! {
-    rtt_init_print!();
-    let _cp = cortex_m::peripheral::Peripherals::take().unwrap();
+    let p = pac::Peripherals::take().unwrap();
+    let mut flash = p.FLASH.constrain();
+    let rcc = p.RCC.constrain();
 
-    let mut dp = pac::Peripherals::take().unwrap();
+    let clocks = rcc.cfgr.adcclk(6.MHz()).freeze(&mut flash.acr);
 
-    let mut gpioa = dp.GPIOA.split();
-    let mut gpiob = dp.GPIOB.split();
+    let dma_ch1 = p.DMA1.split().1;
 
-    let mut led_pb1 = gpiob.pb1.into_push_pull_output(&mut gpiob.crl);
-    led_pb1.set_speed(&mut gpiob.crl, IOPinSpeed::Mhz50);
-    led_pb1.set_high();
+    // Setup ADC
+    let adc1 = adc::Adc::adc1(p.ADC1, clocks);
 
-    let mut afio = dp.AFIO.constrain();
-    let mut infraed_sensor = gpioa.pa8.into_pull_up_input(&mut gpioa.crh);
-    infraed_sensor.make_interrupt_source(&mut afio);
+    // Setup GPIOA
+    let mut gpioa = p.GPIOA.split();
 
-    infraed_sensor.trigger_on_edge(&mut dp.EXTI, Edge::Falling);
+    // Configure pa0 as an analog input
+    let adc_ch5 = gpioa.pa5.into_analog(&mut gpioa.crl);
 
-    infraed_sensor.enable_interrupt(&mut dp.EXTI);
+    let adc_dma = adc1.with_dma(adc_ch5, dma_ch1);
+    let buf = singleton!(: [[u16; 8]; 2] = [[0; 8]; 2]).unwrap();
 
-    rprintln!("Hello, world!");
+    let mut circ_buffer = adc_dma.circ_read(buf);
 
-    unsafe {
-        pac::NVIC::unmask(pac::Interrupt::EXTI9_5);
-    }
+    while circ_buffer.readable_half().unwrap() != Half::First {}
 
-    cortex_m::interrupt::free(|cs| {
-        _jack.borrow(cs).replace(Some(infraed_sensor));
-        _rose.borrow(cs).replace(Some(led_pb1));
-    });
+    let _first_half = circ_buffer.peek(|half, _| *half).unwrap();
 
-    #[allow(clippy::empty_loop)]
+    while circ_buffer.readable_half().unwrap() != Half::Second {}
+
+    let _second_half = circ_buffer.peek(|half, _| *half).unwrap();
+
+    let (_buf, adc_dma) = circ_buffer.stop();
+    let (_adc1, _adc_ch0, _dma_ch1) = adc_dma.split();
+    
+    rprintln!("hello");
+
     loop {}
-}
-
-#[interrupt]
-fn EXTI9_5() {
-    cortex_m::interrupt::free(|cs| {
-        let mut infrared_detection = _jack.borrow(cs).borrow_mut();
-        if infrared_detection.as_mut().unwrap().check_interrupt() {
-            rprint!("low power detected");
-            let mut rose = _rose.borrow(cs).borrow_mut();
-            let rose = rose.as_mut().unwrap();
-            rose.toggle();
-            infrared_detection
-                .as_mut()
-                .unwrap()
-                .clear_interrupt_pending_bit()
-        }
-    })
 }
