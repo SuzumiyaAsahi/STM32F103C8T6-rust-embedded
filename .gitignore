@@ -4,6 +4,7 @@
 Cargo.lock
 target/
 examples/
+.idea/
 
 # editor files
 .vscode/*

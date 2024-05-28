@@ -9,8 +9,7 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
 
 use cortex_m_rt::entry;
 use rtt_target::{rprint, rprintln, rtt_init_print};
-use stm32f1xx_hal::adc;
-use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
+use stm32f1xx_hal::{adc, pac, prelude::*, timer::Timer};
 
 #[entry]
 fn main() -> ! {
@@ -32,4 +31,5 @@ fn main() -> ! {
         let data: u16 = adc1.read(&mut ch0).unwrap();
         rprintln!("adc1: {}", data);
     }
+    a
 }
