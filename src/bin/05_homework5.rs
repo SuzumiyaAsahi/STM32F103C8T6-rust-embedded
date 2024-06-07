@@ -30,7 +30,6 @@ fn main() -> ! {
     loop {
         let data: u16 = adc1.read(&mut ch0).unwrap();
         let v = f32::from(data);
-        rprintln!("adc1: {}", v / 4095 * 3.3);
+        rprintln!("adc1: {}", v / 4095.0 * 3.3);
     }
-    a
 }
